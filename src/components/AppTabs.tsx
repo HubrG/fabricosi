@@ -7,9 +7,10 @@ import { RecipesTab } from "./tabs/RecipesTab";
 import { ClientsTab } from "./tabs/ClientsTab";
 import { OrdersTab } from "./tabs/OrdersTab";
 import { AccountingTab } from "./tabs/AccountingTab";
+import { SimulatorsTab } from "./tabs/SimulatorsTab";
 import type { IngredientWithPurchases, RecipeWithIngredients, Client, OrderWithRelations, OverheadCost } from "@/types";
 import type { Stats } from "@/hooks/use-stats";
-import { LayoutDashboard, Package, ChefHat, Users, ShoppingBag, Calculator } from "lucide-react";
+import { LayoutDashboard, Package, ChefHat, Users, ShoppingBag, Calculator, FlaskConical } from "lucide-react";
 
 interface Props {
   initialIngredients: IngredientWithPurchases[];
@@ -27,6 +28,7 @@ const TABS = [
   { value: "clients", label: "Clients", icon: Users },
   { value: "orders", label: "Commandes", icon: ShoppingBag },
   { value: "accounting", label: "Comptabilité", icon: Calculator },
+  { value: "simulators", label: "Simulateurs", icon: FlaskConical },
 ] as const;
 
 export function AppTabs({
@@ -80,6 +82,14 @@ export function AppTabs({
           <AccountingTab
             initialOrders={initialOrders}
             initialOverheads={initialOverheads}
+            initialStats={initialStats}
+          />
+        </Tabs.Content>
+        <Tabs.Content value="simulators">
+          <SimulatorsTab
+            initialRecipes={initialRecipes}
+            initialOverheads={initialOverheads}
+            initialOrders={initialOrders}
             initialStats={initialStats}
           />
         </Tabs.Content>
