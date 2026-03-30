@@ -1,0 +1,110 @@
+// Prisma 7 — URL de connexion dans prisma.config.ts (pas ici)
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Ingrédients ──────────────────────────────────────────────────────────────
+
+model Ingredient {
+  id           String   @id @default(cuid())
+  name         String
+  unit         String   // "g" | "kg" | "ml" | "l" | "unite"
+  stockQuantity Float   @default(0) // stock actuel (mis à jour à chaque achat ou utilisation)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  purchases         IngredientPurchase[]
+  recipeIngredients RecipeIngredient[]
+}
+
+// Chaque achat d'ingrédient (pour historique + coût réel)
+model IngredientPurchase {
+  id           String     @id @default(cuid())
+  ingredientId String
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  quantity     Float      // quantité achetée
+  cost         Float      // coût total de cet achat (ARS)
+  purchasedAt  DateTime   @default(now())
+}
+
+// ─── Recettes ─────────────────────────────────────────────────────────────────
+
+model Recipe {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  servings    Int      @default(1) // nombre de portions produites
+  salePrice   Float    // prix de vente par portion (ARS)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  ingredients RecipeIngredient[]
+  orderItems  OrderItem[]
+}
+
+model RecipeIngredient {
+  id           String     @id @default(cuid())
+  recipeId     String
+  recipe       Recipe     @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  ingredientId String
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
+  quantity     Float      // quantité utilisée par recette (même unité que l'ingrédient)
+
+  @@unique([recipeId, ingredientId])
+}
+
+// ─── Frais annexes ────────────────────────────────────────────────────────────
+
+model OverheadCost {
+  id        String   @id @default(cuid())
+  name      String   // "Gaz", "Emballages", "Transport"...
+  amount    Float    // montant en ARS
+  frequency String   @default("once") // "once" | "monthly"
+  createdAt DateTime @default(now())
+}
+
+// ─── Clients ──────────────────────────────────────────────────────────────────
+
+model Client {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String?
+  address   String?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders Order[]
+}
+
+// ─── Commandes ────────────────────────────────────────────────────────────────
+
+model Order {
+  id            String    @id @default(cuid())
+  clientId      String
+  client        Client    @relation(fields: [clientId], references: [id])
+  status        String    @default("pending")  // "pending" | "preparing" | "ready" | "delivered"
+  paymentStatus String    @default("unpaid")   // "unpaid" | "partial" | "paid"
+  paidAmount    Float     @default(0)
+  notes         String?
+  orderedAt     DateTime  @default(now())
+  deliveredAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  items OrderItem[]
+}
+
+model OrderItem {
+  id        String @id @default(cuid())
+  orderId   String
+  order     Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  recipeId  String
+  recipe    Recipe @relation(fields: [recipeId], references: [id])
+  quantity  Int    @default(1)  // nb de portions commandées
+  unitPrice Float               // snapshot du prix au moment de la commande
+}
