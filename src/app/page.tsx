@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { AppTabs } from "@/components/AppTabs";
 
+export const dynamic = "force-dynamic";
+
 async function getStats() {
   const [orders, overheads] = await Promise.all([
     prisma.order.findMany({
