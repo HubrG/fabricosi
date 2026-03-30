@@ -18,7 +18,37 @@ import {
   computeMarginPerServing,
 } from "@/types";
 import type { RecipeWithIngredients, IngredientWithPurchases } from "@/types";
-import { Plus, Trash2, ChefHat, X } from "lucide-react";
+import { Plus, Trash2, ChefHat, X, CheckCircle2, AlertTriangle, XCircle, ShoppingCart } from "lucide-react";
+
+// Calcule la faisabilité d'une recette selon le stock actuel
+function computeFeasibility(recipe: RecipeWithIngredients) {
+  let maxPortions = Infinity;
+  const missing: { name: string; unit: string; have: number; need: number; short: number }[] = [];
+
+  for (const ri of recipe.ingredients) {
+    const stock = ri.ingredient.stockQuantity;
+    const neededPerPortion = ri.quantity / recipe.servings;
+    const doable = neededPerPortion > 0 ? Math.floor(stock / neededPerPortion) : Infinity;
+    maxPortions = Math.min(maxPortions, doable);
+
+    // Ce qui manque pour faire 1 batch complet (recipe.servings portions)
+    if (stock < ri.quantity) {
+      missing.push({
+        name: ri.ingredient.name,
+        unit: ri.ingredient.unit,
+        have: stock,
+        need: ri.quantity,
+        short: ri.quantity - stock,
+      });
+    }
+  }
+
+  return {
+    maxPortions: maxPortions === Infinity ? 0 : maxPortions,
+    missing,
+    canMakeAtLeastOne: maxPortions >= 1,
+  };
+}
 
 interface Props {
   initialRecipes: RecipeWithIngredients[];
@@ -133,10 +163,13 @@ function RecipeCard({
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         <Badge variant="secondary">{recipe.servings} portion{recipe.servings > 1 ? "s" : ""}</Badge>
         <Badge variant="outline">{recipe.ingredients.length} ingrédient{recipe.ingredients.length > 1 ? "s" : ""}</Badge>
       </div>
+
+      {/* Faisabilité stock */}
+      <StockFeasibility recipe={recipe} />
     </div>
   );
 }
@@ -161,26 +194,110 @@ function RecipeDetail({ recipe }: { recipe: RecipeWithIngredients }) {
         </div>
       </div>
 
+      {/* Faisabilité dans le détail */}
+      <StockFeasibility recipe={recipe} detailed />
+
       <div>
         <p className="text-sm font-medium mb-2">Composition ({recipe.servings} portion{recipe.servings > 1 ? "s" : ""})</p>
         <div className="space-y-2">
           {recipe.ingredients.map((ri) => {
             const cpu = computeCostPerUnit(ri.ingredient);
             const lineCost = ri.quantity * cpu;
+            const stock = ri.ingredient.stockQuantity;
+            const hasEnough = stock >= ri.quantity;
+            const portionsDoable = ri.quantity > 0
+              ? Math.floor(stock / (ri.quantity / recipe.servings))
+              : Infinity;
+
             return (
-              <div key={ri.id} className="flex justify-between items-center py-2 border-b last:border-0">
-                <div>
-                  <p className="text-sm font-medium">{ri.ingredient.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatUnit(ri.quantity, ri.ingredient.unit)} × {formatARS(cpu)}/{ri.ingredient.unit}
-                  </p>
+              <div key={ri.id} className="py-2 border-b last:border-0">
+                <div className="flex justify-between items-start">
+                  <div className="flex items-center gap-2">
+                    {hasEnough
+                      ? <CheckCircle2 className="h-4 w-4 shrink-0 text-green-500" />
+                      : <XCircle className="h-4 w-4 shrink-0 text-destructive" />
+                    }
+                    <div>
+                      <p className="text-sm font-medium">{ri.ingredient.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Besoin : {formatUnit(ri.quantity, ri.ingredient.unit)} · Stock : {formatUnit(stock, ri.ingredient.unit)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-semibold">{formatARS(lineCost)}</p>
+                    {!hasEnough && (
+                      <p className="text-xs text-destructive font-medium">
+                        Manque {formatUnit(ri.quantity - stock, ri.ingredient.unit)}
+                      </p>
+                    )}
+                    {hasEnough && portionsDoable < Infinity && (
+                      <p className="text-xs text-muted-foreground">{portionsDoable} portions possibles</p>
+                    )}
+                  </div>
                 </div>
-                <p className="text-sm font-semibold">{formatARS(lineCost)}</p>
               </div>
             );
           })}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Composant faisabilité ────────────────────────────────────────────────────
+
+function StockFeasibility({
+  recipe,
+  detailed = false,
+}: {
+  recipe: RecipeWithIngredients;
+  detailed?: boolean;
+}) {
+  const { maxPortions, missing, canMakeAtLeastOne } = computeFeasibility(recipe);
+
+  if (recipe.ingredients.length === 0) return null;
+
+  return (
+    <div
+      className={`rounded-lg border px-3 py-2 text-sm ${
+        canMakeAtLeastOne
+          ? "border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/20"
+          : "border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/20"
+      }`}
+    >
+      <div className="flex items-center gap-2">
+        {canMakeAtLeastOne ? (
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-green-600" />
+        ) : (
+          <XCircle className="h-4 w-4 shrink-0 text-destructive" />
+        )}
+        <span className={`font-semibold ${canMakeAtLeastOne ? "text-green-700 dark:text-green-400" : "text-destructive"}`}>
+          {canMakeAtLeastOne
+            ? `${maxPortions} portion${maxPortions > 1 ? "s" : ""} réalisable${maxPortions > 1 ? "s" : ""} avec le stock actuel`
+            : "Stock insuffisant — impossible de réaliser cette recette"}
+        </span>
+      </div>
+
+      {/* Ingrédients manquants (version compacte sur la carte, détaillée dans le modal) */}
+      {missing.length > 0 && (
+        <div className={`mt-2 space-y-1 ${detailed ? "" : "line-clamp-3"}`}>
+          {missing.map((m) => (
+            <div key={m.name} className="flex items-center gap-1.5 text-xs text-destructive">
+              <ShoppingCart className="h-3 w-3 shrink-0" />
+              <span>
+                <strong>{m.name}</strong> : {formatUnit(m.have, m.unit)} en stock,
+                besoin de {formatUnit(m.need, m.unit)} →{" "}
+                <span className="font-bold">manque {formatUnit(m.short, m.unit)}</span>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {missing.length === 0 && !canMakeAtLeastOne && (
+        <p className="mt-1 text-xs text-destructive">Aucun stock enregistré pour les ingrédients.</p>
+      )}
     </div>
   );
 }
